@@ -1,0 +1,12 @@
+openai
+chromadb
+langchain
+langchain-openai
+langchain-community
+pypdf
+python-dotenv
+python-docx
+pandas
+beautifulsoup4
+markdown
+unstructured[local-inference]

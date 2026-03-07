@@ -1,0 +1,18 @@
+Artificial Intelligence and Machine Learning
+
+Artificial Intelligence (AI) is the simulation of human intelligence by machines. 
+Machine Learning (ML) is a subset of AI that enables systems to learn from data.
+
+Deep Learning is a specialized form of machine learning that uses neural networks 
+with multiple layers. It has revolutionized fields like computer vision and 
+natural language processing.
+
+Key applications include:
+- Image recognition and classification
+- Natural language understanding
+- Autonomous vehicles
+- Recommendation systems
+- Medical diagnosis
+
+The future of AI involves more sophisticated models, better interpretability, 
+and ethical considerations around bias and privacy.
