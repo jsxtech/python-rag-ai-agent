@@ -4,8 +4,10 @@ A minimal Retrieval-Augmented Generation (RAG) agent using LangChain and OpenAI.
 
 ## Setup
 
-1. Install dependencies:
+1. Create a virtual environment and install dependencies:
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -41,12 +43,23 @@ agent2.load_existing()
 answer = agent2.query("Follow-up question?")
 ```
 
+## Testing
+
+```bash
+source .venv/bin/activate
+pytest tests/ -v
+```
+
+Tests are fully mocked and do not require an OpenAI API key.
+
 ## Features
 
 - Document ingestion (PDF, TXT, DOCX, CSV, Markdown, HTML, JSON)
 - Vector storage with ChromaDB (persisted to `./chroma_db`)
 - Semantic search retrieval (top 3 chunks)
 - LLM-powered answer generation
+- Input validation (empty queries, length limits)
+- Structured logging via Python `logging` module
 - File size limit: 50MB per document
 - Chunk size: 1000 chars with 200 char overlap
 
