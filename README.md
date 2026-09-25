@@ -86,3 +86,16 @@ Tests are fully mocked and do not require an OpenAI API key.
   a system binary (`libreoffice` or `antiword`) that is **not** installed by pip.
   If `.doc` ingestion fails, install one of those tools or convert the file to
   `.docx` first. Modern `.docx` files work out of the box.
+
+## Security
+
+Run `pip-audit` (available via `requirements-dev.txt`) to check dependencies for
+known vulnerabilities.
+
+- `pypdf` is pinned to `>=6.16.1` to pick up fixes for a batch of 2026 parsing
+  advisories (malicious-PDF DoS). This matters because `pypdf` parses untrusted
+  input in the ingestion path.
+- `chromadb 1.5.9` (the latest release as of this writing) has open advisories
+  (PYSEC-2026-311, -3813, -3814, -3815) with **no patched version available yet**.
+  These cannot be resolved by upgrading; monitor for a fixed release and bump the
+  pin when one ships.
