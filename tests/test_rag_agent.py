@@ -1,12 +1,12 @@
 """Unit tests for RAGAgent with mocked OpenAI dependencies."""
 
 import json
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from rag_agent import RAGAgent, flatten_json
-
 
 # --- Tests for flatten_json ---
 
@@ -43,6 +43,27 @@ class TestFlattenJson:
     def test_empty_list(self):
         assert flatten_json([]) == ""
 
+    def test_empty_nested_dict_renders_inline(self):
+        """An empty nested dict should render inline, not leave a dangling key."""
+        result = flatten_json({"meta": {}, "name": "x"})
+        assert "meta: {}" in result
+        # No dangling 'meta:' line followed by a blank line.
+        assert "meta:\n" not in result
+        # No blank lines in the output at all.
+        assert "" not in result.split("\n") or result.split("\n").count("") == 0
+
+    def test_empty_nested_list_renders_inline(self):
+        """An empty nested list should render inline as []."""
+        result = flatten_json({"tags": [], "name": "x"})
+        assert "tags: []" in result
+        assert "" not in result.split("\n")
+
+    def test_empty_list_item_container_renders_inline(self):
+        """An empty container inside a list should render inline."""
+        result = flatten_json([{}, []])
+        assert "[0]: {}" in result
+        assert "[1]: []" in result
+
     def test_deeply_nested_hits_depth_limit(self):
         """Verify flatten_json doesn't crash on deeply nested structures."""
         # Build a structure 60 levels deep (exceeds _MAX_JSON_DEPTH=50)
@@ -52,6 +73,15 @@ class TestFlattenJson:
         result = flatten_json(nested)
         assert "max depth exceeded" in result
 
+    def test_depth_limit_logs_warning(self, caplog):
+        """Truncation must be logged so ingestion is not silently lossy."""
+        nested = "leaf"
+        for _ in range(60):
+            nested = {"level": nested}
+        with caplog.at_level(logging.WARNING, logger="rag_agent"):
+            flatten_json(nested)
+        assert any("max depth" in r.message for r in caplog.records)
+
 
 # --- Fixtures ---
 
@@ -59,9 +89,12 @@ class TestFlattenJson:
 @pytest.fixture
 def agent():
     """Create a RAGAgent with mocked OpenAI dependencies."""
-    with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
-        with patch("rag_agent.OpenAIEmbeddings"), patch("rag_agent.ChatOpenAI"):
-            return RAGAgent()
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}),
+        patch("rag_agent.OpenAIEmbeddings"),
+        patch("rag_agent.ChatOpenAI"),
+    ):
+        return RAGAgent()
 
 
 # --- Tests for RAGAgent initialization ---
@@ -140,6 +173,28 @@ class TestLoadDocuments:
         f.write_text("{invalid json content")
         with pytest.raises(ValueError, match="Invalid JSON"):
             agent.load_documents(str(f))
+
+    def test_load_empty_json_object(self, agent, tmp_path):
+        """An empty JSON object flattens to nothing and must raise a clear error."""
+        f = tmp_path / "empty.json"
+        f.write_text("{}")
+        with pytest.raises(ValueError, match="no usable content"):
+            agent.load_documents(str(f))
+
+    def test_load_empty_json_array(self, agent, tmp_path):
+        """An empty JSON array flattens to nothing and must raise a clear error."""
+        f = tmp_path / "empty.json"
+        f.write_text("[]")
+        with pytest.raises(ValueError, match="no usable content"):
+            agent.load_documents(str(f))
+
+    def test_load_json_scalar(self, agent, tmp_path):
+        """A top-level JSON scalar is stringified into the document content."""
+        f = tmp_path / "scalar.json"
+        f.write_text("42")
+        docs = agent.load_documents(str(f))
+        assert len(docs) == 1
+        assert "42" in docs[0].page_content
 
 
 # --- Tests for query validation ---
@@ -271,4 +326,19 @@ class TestLoadExisting:
         agent.persist_directory = str(tmp_path)
         agent.load_existing()
         assert agent.vectorstore is mock_vectorstore
+        assert agent.retrieval_chain is not None
+
+
+# --- Tests for retrieval chain wiring ---
+
+
+class TestRetrievalChain:
+    def test_setup_retrieval_chain_uses_k_3(self, agent):
+        """The retriever must be built with search_kwargs k=3."""
+        mock_vectorstore = MagicMock()
+        agent.vectorstore = mock_vectorstore
+
+        agent._setup_retrieval_chain()
+
+        mock_vectorstore.as_retriever.assert_called_once_with(search_kwargs={"k": 3})
         assert agent.retrieval_chain is not None
