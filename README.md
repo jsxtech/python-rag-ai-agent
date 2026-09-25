@@ -67,7 +67,7 @@ Tests are fully mocked and do not require an OpenAI API key.
 
 - `.pdf` - PDF documents
 - `.txt` - Plain text
-- `.docx`, `.doc` - Word documents
+- `.docx`, `.doc` - Word documents (see note below)
 - `.csv` - CSV files
 - `.md`, `.markdown` - Markdown
 - `.html`, `.htm` - HTML
@@ -79,3 +79,10 @@ Tests are fully mocked and do not require an OpenAI API key.
 - No document deletion/management
 - Fixed chunk parameters
 - UTF-8 encoding assumed for text files
+
+## Notes
+
+- Legacy `.doc` (binary Word) files are loaded via `unstructured`, which relies on
+  a system binary (`libreoffice` or `antiword`) that is **not** installed by pip.
+  If `.doc` ingestion fails, install one of those tools or convert the file to
+  `.docx` first. Modern `.docx` files work out of the box.
