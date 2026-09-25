@@ -36,25 +36,40 @@ _MAX_JSON_DEPTH = 50
 
 
 def flatten_json(obj: object, prefix: str = "", _depth: int = 0) -> str:
-    """Recursively flatten a JSON object into a human-readable string."""
+    """Recursively flatten a JSON object into a human-readable string.
+
+    Nested structures deeper than ``_MAX_JSON_DEPTH`` are truncated to avoid
+    unbounded recursion; truncation is logged as a warning so ingestion is not
+    silently lossy. Empty dicts/lists render inline (e.g. ``key: {}``) rather
+    than emitting a dangling key followed by a blank line.
+    """
     if _depth > _MAX_JSON_DEPTH:
+        logger.warning(
+            "JSON nesting exceeded max depth of %d at %r; content truncated",
+            _MAX_JSON_DEPTH,
+            prefix or "<root>",
+        )
         return f"{prefix}... (max depth exceeded)"
+
+    def _render(value: object, key_prefix: str, inline_label: str) -> None:
+        """Append rendered lines for a single dict value or list item."""
+        if isinstance(value, (dict, list)) and len(value) == 0:
+            # Empty container: render inline to avoid a dangling key + blank line.
+            marker = "{}" if isinstance(value, dict) else "[]"
+            lines.append(f"{inline_label} {marker}")
+        elif isinstance(value, (dict, list)):
+            lines.append(inline_label)
+            lines.append(flatten_json(value, key_prefix + "  ", _depth + 1))
+        else:
+            lines.append(f"{inline_label} {value}")
 
     lines: list[str] = []
     if isinstance(obj, dict):
         for key, value in obj.items():
-            if isinstance(value, (dict, list)):
-                lines.append(f"{prefix}{key}:")
-                lines.append(flatten_json(value, prefix + "  ", _depth + 1))
-            else:
-                lines.append(f"{prefix}{key}: {value}")
+            _render(value, prefix, f"{prefix}{key}:")
     elif isinstance(obj, list):
         for i, item in enumerate(obj):
-            if isinstance(item, (dict, list)):
-                lines.append(f"{prefix}[{i}]:")
-                lines.append(flatten_json(item, prefix + "  ", _depth + 1))
-            else:
-                lines.append(f"{prefix}[{i}]: {item}")
+            _render(item, prefix, f"{prefix}[{i}]:")
     else:
         return str(obj)
     return "\n".join(lines)
@@ -120,6 +135,8 @@ class RAGAgent:
             raise ValueError(f"Invalid JSON in {file_path}: {e}") from e
 
         content = flatten_json(data) if isinstance(data, (dict, list)) else str(data)
+        if not content.strip():
+            raise ValueError(f"JSON file contains no usable content: {file_path}")
         return [Document(page_content=content, metadata={"source": file_path})]
 
     def ingest(self, file_path: str) -> None:
@@ -174,8 +191,10 @@ class RAGAgent:
             [
                 (
                     "system",
-                    "Answer the user's question based on the following context. "
-                    "If the context doesn't contain relevant information, say so.\n\n{context}",
+                    (
+                        "Answer the user's question based on the following context. "
+                        "If the context doesn't contain relevant information, say so.\n\n{context}"
+                    ),
                 ),
                 ("human", "{input}"),
             ]
